@@ -29,7 +29,7 @@
     #hint { position: fixed; left: 0; right: 0; bottom: 32px; z-index: 5; display: none;
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
-    #fsBtn { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; z-index: 30;
+    #fsBtn { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); right: 16px; z-index: 30;
              display: none; width: 44px; height: 44px; border: 0; border-radius: 50%;
              background: rgba(0,0,0,.45); color: #fff; padding: 10px; }
     #fsBtn svg { width: 100%; height: 100%; display: block; }
@@ -168,7 +168,7 @@
   </div>
   <div id="hint">Point your camera at the print</div>
 
-  <!-- Full-screen toggle (only shown on phones whose browser allows it) -->
+  <!-- Full-screen button: browser full screen where allowed, otherwise the video full screen (iPhone) -->
   <button id="fsBtn" aria-label="Full screen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
@@ -252,18 +252,33 @@
     });
   </script>
   <script>
-    // Full screen where the browser supports it (Android Chrome, iPad). iPhone browsers don't allow it for web pages.
+    // Full screen: Android/iPad put the whole AR page full screen.
+    // iPhone browsers don't allow that for web pages, so there the button plays the animation full screen.
     (function () {
       const btn = document.getElementById('fsBtn');
       const root = document.documentElement;
-      const canFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-      if (!canFs) return;
-      btn.style.display = 'block';
+      const vid = document.getElementById('vid');
+      const tgt = document.getElementById('target');
+      const pageFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+
+      // show the button once the AR view is running
+      document.getElementById('startBtn').addEventListener('click', () => { btn.style.display = 'block'; });
+
       btn.addEventListener('click', () => {
-        const inFs = document.fullscreenElement || document.webkitFullscreenElement;
-        if (inFs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-        else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+        if (pageFs) {
+          const inFs = document.fullscreenElement || document.webkitFullscreenElement;
+          if (inFs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+          else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+        } else if (vid.webkitEnterFullscreen) {
+          try { vid.play(); vid.webkitEnterFullscreen(); } catch (e) { console.log('video fullscreen failed', e); }
+        }
       });
+
+      // after the iPhone video player closes, carry on playing in AR if the print is still in view
+      vid.addEventListener('webkitendfullscreen', () => {
+        if (tgt.object3D.visible) vid.play().catch(() => {}); else vid.pause();
+      });
+
       // MindAR re-fits the camera when the window size changes
       const refit = () => setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
       document.addEventListener('fullscreenchange', refit);
