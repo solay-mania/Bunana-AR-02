@@ -23,6 +23,40 @@
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
   </style>
+
+  <script>
+    // Tuning from the link, e.g. ?smooth=0.15&cf=0.0001&beta=0.001
+    const params = new URLSearchParams(location.search);
+    const TUNE = {
+      smooth: parseFloat(params.get('smooth') ?? '0.2'),   // 0.05 = very smooth/slow ... 1 = no extra smoothing
+      cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
+      beta:   parseFloat(params.get('beta')   ?? '0.001'),  // MindAR filter: higher = less lag when moving
+    };
+
+    AFRAME.registerComponent('smooth-follow', {
+      schema: { target: { type: 'selector' } },
+      init() {
+        this.p = new THREE.Vector3(); this.q = new THREE.Quaternion(); this.s = new THREE.Vector3();
+        this.snap = true;
+        this.el.object3D.visible = false;
+      },
+      tick(time, dt) {
+        const src = this.data.target.object3D;
+        const obj = this.el.object3D;
+        if (!src.visible) { obj.visible = false; this.snap = true; return; }
+        src.updateMatrixWorld(true);
+        src.matrixWorld.decompose(this.p, this.q, this.s);
+        if (this.snap) {                       // first frame after finding the print: jump into place
+          obj.position.copy(this.p); obj.quaternion.copy(this.q); obj.scale.copy(this.s);
+          this.snap = false;
+        } else {                               // then ease toward it, independent of frame rate
+          const k = 1 - Math.pow(1 - Math.min(TUNE.smooth, 1), (dt || 16.7) / 16.7);
+          obj.position.lerp(this.p, k); obj.quaternion.slerp(this.q, k); obj.scale.lerp(this.s, k);
+        }
+        obj.visible = true;
+      }
+    });
+  </script>
 </head>
 <body>
 
@@ -39,7 +73,7 @@
       video.mp4     - your video, cropped to the same shape as the print
   -->
   <a-scene id="scene"
-           mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; warmupTolerance: 2"
+           mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiScanning: no; missTolerance: 5; warmupTolerance: 2"
            color-space="sRGB"
            renderer="colorManagement: true; physicallyCorrectLights: true"
            vr-mode-ui="enabled: false"
@@ -52,13 +86,14 @@
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-entity id="target" mindar-image-target="targetIndex: 0">
+    <!-- Raw tracking anchor (moves with every tracking update) -->
+    <a-entity id="target" mindar-image-target="targetIndex: 0"></a-entity>
+
+    <!-- Smoothed copy of the anchor: the video lives here so it glides instead of shaking -->
+    <a-entity id="follower" smooth-follow="target: #target">
       <!--
         SIZE: width is always 1 (= the print's width).
-        height = print height / print width
-          6 x 4 cm landscape  -> 0.6667
-          4 x 6 cm portrait   -> 1.5
-          square              -> 1
+        height = print height / print width  (5:7 portrait -> 1.4)
       -->
       <a-video src="#vid" width="1" height="1.4" position="0 0 0"></a-video>
     </a-entity>
@@ -92,7 +127,10 @@
       await sceneReady();
       startEl.style.display = 'none';
       hint.style.display = 'block';
-      await scene.systems['mindar-image-system'].start();
+      const ar = scene.systems['mindar-image-system'];
+      ar.filterMinCF = TUNE.cf;
+      ar.filterBeta  = TUNE.beta;
+      await ar.start();
     });
 
     target.addEventListener('targetFound', () => {
