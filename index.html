@@ -28,9 +28,9 @@
     // Tuning from the link, e.g. ?smooth=0.15&cf=0.0001&beta=0.001
     const params = new URLSearchParams(location.search);
     const TUNE = {
-      smooth: parseFloat(params.get('smooth') ?? '0.2'),   // 0.05 = very smooth/slow ... 1 = no extra smoothing
+      smooth: parseFloat(params.get('smooth') ?? '1'),   // 0.05 = very smooth/slow ... 1 = no extra smoothing
       cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
-      beta:   parseFloat(params.get('beta')   ?? '0.001'),  // MindAR filter: higher = less lag when moving
+      beta:   parseFloat(params.get('beta')   ?? '1000'),  // MindAR filter: higher = less lag when moving
       feather: parseFloat(params.get('feather') ?? '0'), // soft edge, as a share of the video's width (0 = hard edge)
       match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
       debug:  params.get('debug') === '1',                  // show the measured colour correction on screen
