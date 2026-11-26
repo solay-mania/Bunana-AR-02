@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>AR Print</title>
+
+  <!-- A-Frame + MindAR image tracking (versions tested together) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
+                 font-family: -apple-system, system-ui, sans-serif; }
+    #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; gap: 20px; padding: 24px;
+             background: #111; color: #fff; text-align: center; }
+    #start p { font-size: 18px; line-height: 1.4; max-width: 320px; margin: 0; }
+    #startBtn { font-size: 18px; font-weight: 600; padding: 14px 36px; border: 0;
+                border-radius: 999px; background: #fff; color: #111; }
+    #hint { position: fixed; left: 0; right: 0; bottom: 32px; z-index: 5; display: none;
+            text-align: center; color: #fff; font-size: 16px;
+            text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <!-- Start screen: the tap is needed so phones allow the video to play with sound -->
+  <div id="start">
+    <p>Point your camera at the print to bring it to life.</p>
+    <button id="startBtn">Start</button>
+  </div>
+  <div id="hint">Point your camera at the print</div>
+
+  <!--
+    FILES THIS PAGE NEEDS (in the same folder):
+      targets.mind  - made from your print image with the MindAR compiler
+      video.mp4     - your video, cropped to the same shape as the print
+  -->
+  <a-scene id="scene"
+           mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiScanning: no"
+           color-space="sRGB"
+           renderer="colorManagement: true; physicallyCorrectLights: true"
+           vr-mode-ui="enabled: false"
+           device-orientation-permission-ui="enabled: false">
+
+    <a-assets>
+      <video id="vid" src="video.mp4" preload="auto" loop muted
+             playsinline webkit-playsinline crossorigin="anonymous"></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity id="target" mindar-image-target="targetIndex: 0">
+      <!--
+        SIZE: width is always 1 (= the print's width).
+        height = print height / print width
+          6 x 4 cm landscape  -> 0.6667
+          4 x 6 cm portrait   -> 1.5
+          square              -> 1
+      -->
+      <a-video src="#vid" width="1" height="1.4" position="0 0 0"></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const scene    = document.getElementById('scene');
+    const target   = document.getElementById('target');
+    const video    = document.getElementById('vid');
+    const startEl  = document.getElementById('start');
+    const startBtn = document.getElementById('startBtn');
+    const hint     = document.getElementById('hint');
+
+    function sceneReady() {
+      return new Promise(res => scene.hasLoaded ? res() : scene.addEventListener('loaded', res, { once: true }));
+    }
+
+    startBtn.addEventListener('click', async () => {
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting…';
+
+      // Unlock video playback (with sound) while we still have the user's tap
+      try {
+        await video.play();
+        video.pause();
+        video.currentTime = 0;
+      } catch (e) {
+        video.muted = true; // fall back to muted if the phone refuses sound
+      }
+
+      await sceneReady();
+      startEl.style.display = 'none';
+      hint.style.display = 'block';
+      await scene.systems['mindar-image-system'].start();
+    });
+
+    target.addEventListener('targetFound', () => {
+      hint.style.display = 'none';
+      video.play().catch(() => { video.muted = true; video.play(); });
+    });
+
+    target.addEventListener('targetLost', () => {
+      hint.style.display = 'block';
+      video.pause();
+    });
+  </script>
+</body>
+</html>
