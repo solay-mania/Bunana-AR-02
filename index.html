@@ -15,6 +15,54 @@
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
+  <script>
+    // Camera start fix: iPhones sometimes report one camera size, then switch to another a moment later.
+    // MindAR would lock in the first size (black bars + video drawn too large). Here we wait until the
+    // camera size is stable before starting tracking, and restart tracking if it changes afterwards.
+    (function () {
+      const Sys = AFRAME.systems['mindar-image-system'].prototype;
+      Sys._startVideo = function () {
+        const v = this.video = document.createElement('video');
+        v.setAttribute('autoplay', ''); v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+        v.muted = true;
+        v.style.cssText = 'position:absolute;top:0;left:0;z-index:-2';
+        this.container.appendChild(v);
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          this.el.emit('arError', { error: 'VIDEO_FAIL' }); this.ui.showCompatibility(); return;
+        }
+        navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } }).then((stream) => {
+          v.addEventListener('loadedmetadata', async () => {
+            try { await v.play(); } catch (e) {}
+            // wait until the size has been the same for 400 ms (at most 2.5 s)
+            let last = v.videoWidth + 'x' + v.videoHeight, since = performance.now(); const t0 = since;
+            while (performance.now() - t0 < 2500) {
+              await new Promise(r => setTimeout(r, 100));
+              const cur = v.videoWidth + 'x' + v.videoHeight;
+              if (cur !== last) { last = cur; since = performance.now(); }
+              else if (performance.now() - since >= 400) break;
+            }
+            if (v !== this.video) return;              // a restart already replaced this camera
+            v.setAttribute('width', v.videoWidth); v.setAttribute('height', v.videoHeight);
+            this._inW = v.videoWidth; this._inH = v.videoHeight;
+            this._startAR();
+            v.addEventListener('resize', () => {
+              if (v !== this.video || !this.controller || this._restarting) return;
+              if (v.videoWidth && (v.videoWidth !== this._inW || v.videoHeight !== this._inH)) {
+                this._restarting = true;
+                setTimeout(() => { this.stop(); this._restarting = false; this.start(); }, 300);
+              }
+            });
+          }, { once: true });
+          v.srcObject = stream;
+        }).catch((err) => {
+          console.log('getUserMedia error', err);
+          this.el.emit('arError', { error: 'VIDEO_FAIL' });
+        });
+      };
+    })();
+  </script>
+
   <style>
     /* Black goes on <html> only: a background on <body> would cover the live camera feed */
     html { background: #000; height: 100%; }
