@@ -29,10 +29,6 @@
     #hint { position: fixed; left: 0; right: 0; bottom: 32px; z-index: 5; display: none;
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
-    #fsBtn { position: fixed; bottom: calc(20px + env(safe-area-inset-bottom)); right: 16px; z-index: 30;
-             display: none; width: 44px; height: 44px; border: 0; border-radius: 50%;
-             background: rgba(0,0,0,.45); color: #fff; padding: 10px; }
-    #fsBtn svg { width: 100%; height: 100%; display: block; }
   </style>
 
   <script>
@@ -40,7 +36,7 @@
     const params = new URLSearchParams(location.search);
     const TUNE = {
       smooth: parseFloat(params.get('smooth') ?? '0.5'),   // 0.05 = very smooth/slow ... 1 = no extra smoothing
-      cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
+      cf:     parseFloat(params.get('cf')     ?? '0.00005'), // MindAR filter: lower = steadier when still
       beta:   parseFloat(params.get('beta')   ?? '1'),  // MindAR filter: higher = less lag when moving
       feather: parseFloat(params.get('feather') ?? '0'), // soft edge, as a share of the video's width (0 = hard edge)
       match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
@@ -168,12 +164,6 @@
   </div>
   <div id="hint">Point your camera at the print</div>
 
-  <!-- Full-screen button: browser full screen where allowed, otherwise the video full screen (iPhone) -->
-  <button id="fsBtn" aria-label="Full screen">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
-    </svg>
-  </button>
 
   <!--
     FILES THIS PAGE NEEDS (in the same folder):
@@ -250,40 +240,6 @@
       hint.style.display = 'block';
       video.pause();
     });
-  </script>
-  <script>
-    // Full screen: Android/iPad put the whole AR page full screen.
-    // iPhone browsers don't allow that for web pages, so there the button plays the animation full screen.
-    (function () {
-      const btn = document.getElementById('fsBtn');
-      const root = document.documentElement;
-      const vid = document.getElementById('vid');
-      const tgt = document.getElementById('target');
-      const pageFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
-
-      // show the button once the AR view is running
-      document.getElementById('startBtn').addEventListener('click', () => { btn.style.display = 'block'; });
-
-      btn.addEventListener('click', () => {
-        if (pageFs) {
-          const inFs = document.fullscreenElement || document.webkitFullscreenElement;
-          if (inFs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-          else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
-        } else if (vid.webkitEnterFullscreen) {
-          try { vid.play(); vid.webkitEnterFullscreen(); } catch (e) { console.log('video fullscreen failed', e); }
-        }
-      });
-
-      // after the iPhone video player closes, carry on playing in AR if the print is still in view
-      vid.addEventListener('webkitendfullscreen', () => {
-        if (tgt.object3D.visible) vid.play().catch(() => {}); else vid.pause();
-      });
-
-      // MindAR re-fits the camera when the window size changes
-      const refit = () => setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
-      document.addEventListener('fullscreenchange', refit);
-      document.addEventListener('webkitfullscreenchange', refit);
-    })();
   </script>
 </body>
 </html>
