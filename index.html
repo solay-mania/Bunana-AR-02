@@ -32,7 +32,64 @@
       cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
       beta:   parseFloat(params.get('beta')   ?? '0.001'),  // MindAR filter: higher = less lag when moving
       feather: parseFloat(params.get('feather') ?? '0.06'), // soft edge, as a share of the video's width (0 = hard edge)
+      match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
+      debug:  params.get('debug') === '1',                  // show the measured colour correction on screen
     };
+    const ASPECT = 1.4; // print height / width
+
+    // Colour matching: measure the print's white backdrop as the camera sees it,
+    // compare with its true colour in the file, and tint/dim the video the same way.
+    AFRAME.registerComponent('color-match', {
+      schema: { target: { type: 'selector' } },
+      init() {
+        this.canvas = document.createElement('canvas');
+        this.ctx = this.canvas.getContext('2d', { willReadFrequently: true });
+        this.REF = [236.7, 236.0, 240.5];          // average sRGB of the white backdrop in the print file
+        this.pts = [];                             // sample grid over that backdrop (u across, v down from top)
+        for (let i = 0; i < 7; i++) for (let j = 0; j < 5; j++) this.pts.push([0.12 + 0.76 * i / 6, 0.04 + 0.26 * j / 4]);
+        this.v = new THREE.Vector3(); this.gain = null; this.last = 0;
+        if (TUNE.debug) {
+          this.dbg = document.createElement('div');
+          this.dbg.style.cssText = 'position:fixed;top:8px;left:8px;z-index:20;color:#fff;font:12px monospace;background:rgba(0,0,0,.5);padding:4px 6px;border-radius:4px';
+          document.body.appendChild(this.dbg);
+        }
+      },
+      tick(time) {
+        if (TUNE.match <= 0 || time - this.last < 200) return;
+        this.last = time;
+        const src = this.data.target.object3D;
+        const sys = this.el.sceneEl.systems['mindar-image-system'];
+        const video = sys && sys.video, mesh = this.el.getObject3D('mesh');
+        if (!src.visible || !video || !video.videoWidth || !mesh) return;
+
+        const cw = Math.round(video.videoWidth / 4), ch = Math.round(video.videoHeight / 4);
+        if (this.canvas.width !== cw || this.canvas.height !== ch) { this.canvas.width = cw; this.canvas.height = ch; }
+        this.ctx.drawImage(video, 0, 0, cw, ch);
+        const data = this.ctx.getImageData(0, 0, cw, ch).data;
+
+        const cam = this.el.sceneEl.camera;
+        const cr = this.el.sceneEl.canvas.getBoundingClientRect(), vr = video.getBoundingClientRect();
+        src.updateMatrixWorld(true);
+        const sum = [0, 0, 0]; let n = 0;
+        for (const [u, v] of this.pts) {
+          this.v.set(u - 0.5, (0.5 - v) * ASPECT, 0).applyMatrix4(src.matrixWorld).project(cam);
+          const sx = (this.v.x + 1) / 2 * cr.width + cr.left, sy = (1 - this.v.y) / 2 * cr.height + cr.top;
+          const px = Math.floor((sx - vr.left) / vr.width * cw), py = Math.floor((sy - vr.top) / vr.height * ch);
+          if (px < 1 || py < 1 || px >= cw - 1 || py >= ch - 1) continue;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const k = ((py + dy) * cw + (px + dx)) * 4;
+            sum[0] += data[k]; sum[1] += data[k + 1]; sum[2] += data[k + 2]; n++;
+          }
+        }
+        if (n < 45) return;                        // fewer than 5 sample points on screen: keep last value
+
+        const g = sum.map((t, i) => Math.min(1.2, Math.max(0.3, (t / n) / this.REF[i])));
+        this.gain = this.gain ? this.gain.map((x, i) => x + (g[i] - x) * 0.3) : g;
+        const lin = this.gain.map(x => Math.pow(1 + (x - 1) * TUNE.match, 2.2));   // sRGB ratio -> linear
+        mesh.material.color.setRGB(lin[0], lin[1], lin[2]);
+        if (this.dbg) this.dbg.textContent = 'R ' + this.gain[0].toFixed(2) + '  G ' + this.gain[1].toFixed(2) + '  B ' + this.gain[2].toFixed(2);
+      }
+    });
 
     // Soft edges: a generated alpha mask that fades the video out toward its sides
     AFRAME.registerComponent('feather', {
@@ -128,7 +185,7 @@
         SIZE: width is always 1 (= the print's width).
         height = print height / print width  (5:7 portrait -> 1.4)
       -->
-      <a-video src="#vid" width="1" height="1.4" position="0 0 0" feather="aspect: 1.4"></a-video>
+      <a-video src="#vid" width="1" height="1.4" position="0 0 0" feather="aspect: 1.4" color-match="target: #target"></a-video>
     </a-entity>
   </a-scene>
 
