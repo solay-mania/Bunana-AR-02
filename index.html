@@ -10,7 +10,8 @@
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
+    /* No background on body: it would cover the live camera feed that MindAR puts behind the scene */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
                  font-family: -apple-system, system-ui, sans-serif; }
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
              align-items: center; justify-content: center; gap: 20px; padding: 24px;
@@ -38,7 +39,7 @@
       video.mp4     - your video, cropped to the same shape as the print
   -->
   <a-scene id="scene"
-           mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiScanning: no"
+           mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiScanning: no; filterMinCF: 0.0001; filterBeta: 0.001; missTolerance: 5; warmupTolerance: 2"
            color-space="sRGB"
            renderer="colorManagement: true; physicallyCorrectLights: true"
            vr-mode-ui="enabled: false"
