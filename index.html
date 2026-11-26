@@ -2,26 +2,37 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>AR Print</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <!-- Lets the page open full screen (no browser bars) when added to the home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <title>Bunana AR</title>
 
   <!-- A-Frame + MindAR image tracking (versions tested together) -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    /* No background on body: it would cover the live camera feed that MindAR puts behind the scene */
-    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
-                 font-family: -apple-system, system-ui, sans-serif; }
+    /* Black goes on <html> only: a background on <body> would cover the live camera feed */
+    html { background: #000; height: 100%; }
+    body { margin: 0; position: fixed; inset: 0; overflow: hidden; background: transparent;
+           font-family: -apple-system, system-ui, sans-serif; }
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
              align-items: center; justify-content: center; gap: 20px; padding: 24px;
-             background: #111; color: #fff; text-align: center; }
+             background: #000; color: #fff; text-align: center; }
     #start p { font-size: 18px; line-height: 1.4; max-width: 320px; margin: 0; }
     #startBtn { font-size: 18px; font-weight: 600; padding: 14px 36px; border: 0;
                 border-radius: 999px; background: #fff; color: #111; }
     #hint { position: fixed; left: 0; right: 0; bottom: 32px; z-index: 5; display: none;
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
+    #fsBtn { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; z-index: 30;
+             display: none; width: 44px; height: 44px; border: 0; border-radius: 50%;
+             background: rgba(0,0,0,.45); color: #fff; padding: 10px; }
+    #fsBtn svg { width: 100%; height: 100%; display: block; }
   </style>
 
   <script>
@@ -157,6 +168,13 @@
   </div>
   <div id="hint">Point your camera at the print</div>
 
+  <!-- Full-screen toggle (only shown on phones whose browser allows it) -->
+  <button id="fsBtn" aria-label="Full screen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>
+    </svg>
+  </button>
+
   <!--
     FILES THIS PAGE NEEDS (in the same folder):
       targets.mind  - made from your print image with the MindAR compiler
@@ -232,6 +250,25 @@
       hint.style.display = 'block';
       video.pause();
     });
+  </script>
+  <script>
+    // Full screen where the browser supports it (Android Chrome, iPad). iPhone browsers don't allow it for web pages.
+    (function () {
+      const btn = document.getElementById('fsBtn');
+      const root = document.documentElement;
+      const canFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+      if (!canFs) return;
+      btn.style.display = 'block';
+      btn.addEventListener('click', () => {
+        const inFs = document.fullscreenElement || document.webkitFullscreenElement;
+        if (inFs) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        else (root.requestFullscreen || root.webkitRequestFullscreen).call(root);
+      });
+      // MindAR re-fits the camera when the window size changes
+      const refit = () => setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+      document.addEventListener('fullscreenchange', refit);
+      document.addEventListener('webkitfullscreenchange', refit);
+    })();
   </script>
 </body>
 </html>
