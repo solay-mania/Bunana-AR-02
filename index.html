@@ -88,11 +88,13 @@
     const params = new URLSearchParams(location.search);
     const TUNE = {
       smooth: params.has('smooth') ? parseFloat(params.get('smooth')) : null, // fixed smoothing (old behaviour)
-      still:  parseFloat(params.get('still')  ?? '0.06'),  // adaptive: follow speed when holding still (lower = calmer)
-      move:   parseFloat(params.get('move')   ?? '0.6'),   // adaptive: follow speed when moving (higher = less lag)
-      cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
-      beta:   parseFloat(params.get('beta')   ?? '10'),     // MindAR filter: higher = less lag when moving
+      still:  parseFloat(params.get('still')  ?? '0.04'),  // adaptive: follow speed when holding still (lower = calmer)
+      move:   parseFloat(params.get('move')   ?? '0.5'),   // adaptive: follow speed when moving (higher = less lag)
+      cf:     parseFloat(params.get('cf')     ?? '0.00005'), // MindAR filter: lower = steadier when still
+      beta:   parseFloat(params.get('beta')   ?? '1'),     // MindAR filter: higher = less lag when moving
       res:    parseInt(params.get('res')      ?? '720', 10), // camera resolution (short side); 0 = phone default
+      noise:  parseFloat(params.get('noise')  ?? '2'),     // how big a wobble counts as noise (higher = ignores bigger wobbles)
+      turn:   parseFloat(params.get('turn')   ?? '0.6'),   // rotation follows at this share of the position speed (lower = calmer tilt)
       feather: parseFloat(params.get('feather') ?? '0'), // soft edge, as a share of the video's width (0 = hard edge)
       match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
       debug:  params.get('debug') === '1',                  // show the measured colour correction on screen
@@ -211,12 +213,13 @@
             const width = Math.max(this.s.x, 1e-6);                       // print width in scene units
             const dPos = obj.position.distanceTo(this.p) / width;         // in print widths
             const dAng = obj.quaternion.angleTo(this.q);                  // radians
-            const motion = Math.max(dPos / 0.04, dAng / 0.05);            // 1 = ~4% of width or ~3 degrees
+            const motion = Math.max(dPos / (0.04 * TUNE.noise), dAng / (0.05 * TUNE.noise)); // noise=2: ~8% of width or ~6 degrees
             const t = Math.min(1, motion); const e = t * t * (3 - 2 * t);
             base = TUNE.still + (TUNE.move - TUNE.still) * e;
           }
           const k = 1 - Math.pow(1 - base, (dt || 16.7) / 16.7);           // same feel at any frame rate
-          obj.position.lerp(this.p, k); obj.quaternion.slerp(this.q, k); obj.scale.lerp(this.s, k);
+          const kr = TUNE.smooth !== null ? k : k * TUNE.turn;               // tilt/rotation is the noisiest: calm it more
+          obj.position.lerp(this.p, k); obj.quaternion.slerp(this.q, kr); obj.scale.lerp(this.s, k);
         }
         obj.visible = true;
       }
