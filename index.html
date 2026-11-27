@@ -318,6 +318,20 @@
       document.body.appendChild(dbgBox);
     }
 
+    // If the camera can't start (permission refused, no camera), say so instead of spinning forever
+    scene.addEventListener('arError', () => {
+      const ar = scene.systems['mindar-image-system'];
+      try { ar.ui.hideLoading(); ar.ui.hideScanning(); } catch (e) {}
+      hint.style.display = 'none';
+      startEl.style.display = 'flex';
+      startEl.querySelector('p').textContent =
+        'This needs your camera. Allow camera access for this site in your browser settings, then tap Try again.';
+      const retry = startBtn.cloneNode(true);       // drop the old start handler
+      retry.disabled = false; retry.textContent = 'Try again';
+      retry.addEventListener('click', () => location.reload());
+      startBtn.replaceWith(retry);
+    });
+
     startBtn.addEventListener('click', async () => {
       startBtn.disabled = true;
       startBtn.textContent = 'Starting…';
