@@ -89,7 +89,7 @@
   <style>
     /* Black goes on <html> only: a background on <body> would cover the live camera feed */
     html { background: #000; height: 100%; }
-    body { margin: 0; position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100lvh;
+    body { margin: 0; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
            overflow: hidden; background: transparent;
            font-family: -apple-system, system-ui, sans-serif; }
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
@@ -300,6 +300,24 @@
       return new Promise(res => scene.hasLoaded ? res() : scene.addEventListener('loaded', res, { once: true }));
     }
 
+    // Size the page to the real visible screen height (see refit below)
+    function fitBody() {
+      const h = Math.round(Math.max(
+        window.innerHeight || 0,
+        (window.visualViewport && visualViewport.height) || 0,
+        document.documentElement.clientHeight || 0));
+      if (h && document.body.style.height !== h + 'px') document.body.style.height = h + 'px';
+    }
+    fitBody();
+    window.addEventListener('resize', fitBody);
+
+    let dbgBox = null;
+    if (TUNE.debug) {
+      dbgBox = document.createElement('pre');
+      dbgBox.style.cssText = 'position:fixed;left:8px;top:40px;z-index:20;margin:0;color:#fff;font:11px/1.4 monospace;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:4px;white-space:pre-wrap;max-width:90vw';
+      document.body.appendChild(dbgBox);
+    }
+
     startBtn.addEventListener('click', async () => {
       startBtn.disabled = true;
       startBtn.textContent = 'Starting…';
@@ -321,18 +339,29 @@
       ar.filterBeta  = TUNE.beta;
       await ar.start();
 
-      // Keep the camera filling the screen: iPhone browsers change the page height after start
-      // (permission banner, toolbars) without always telling MindAR, which leaves a black band.
-      let lastW = 0, lastH = 0;
+      // Keep the camera filling the screen. iPhone browsers (Chrome especially) sometimes report a
+      // page height that is shorter than what's visible, depending on the toolbars, which leaves a
+      // black band. So the page is sized from the real visible height, re-checked twice a second,
+      // and MindAR re-fits the camera whenever the page or camera size changes.
+      let last = '';
       const refit = () => {
-        const c = ar.container;
-        if (!ar.controller || !ar.video || !ar.video.videoWidth || !c) return;
-        if (c.clientWidth !== lastW || c.clientHeight !== lastH) {
-          lastW = c.clientWidth; lastH = c.clientHeight;
-          ar._resize();
+        fitBody();
+        const c = ar.container, v = ar.video;
+        if (!ar.controller || !v || !v.videoWidth || !c) return;
+        const key = c.clientWidth + 'x' + c.clientHeight + '|' + v.videoWidth + 'x' + v.videoHeight;
+        if (key !== last) { last = key; ar._resize(); }
+        if (dbgBox) {
+          const r = v.getBoundingClientRect(), t = v.srcObject && v.srcObject.getVideoTracks()[0];
+          dbgBox.textContent =
+            'view ' + innerWidth + 'x' + innerHeight +
+            (window.visualViewport ? '  vv ' + Math.round(visualViewport.width) + 'x' + Math.round(visualViewport.height) : '') +
+            '  page ' + c.clientWidth + 'x' + c.clientHeight +
+            '\ncam ' + v.videoWidth + 'x' + v.videoHeight + '  box ' + Math.round(r.width) + 'x' + Math.round(r.height) +
+            ' @' + Math.round(r.top) + '\n' + (t ? t.label : '');
         }
       };
       setInterval(refit, 500);
+      window.addEventListener('resize', () => setTimeout(refit, 100));
       if (window.visualViewport) visualViewport.addEventListener('resize', () => setTimeout(refit, 100));
 
       // Tap to focus (only where the browser supports camera focus control, e.g. Android Chrome)
