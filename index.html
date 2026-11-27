@@ -117,6 +117,8 @@
     #hint { position: fixed; left: 24px; right: 24px; bottom: 32px; z-index: 5; display: none;
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
+    .sub { font-size: 14px; opacity: .75; }
+    #start p.sub { font-size: 15px; margin-top: -8px; }
   </style>
 
   <script>
@@ -260,9 +262,10 @@
   <!-- Start screen: the tap is needed so phones allow the video to play with sound -->
   <div id="start">
     <p>Point your camera at the banana bread photo next to the QR code.</p>
+    <p class="sub">Hold your phone about 20–30 cm away.</p>
     <button id="startBtn">Start</button>
   </div>
-  <div id="hint">Point your camera at the banana bread photo next to the QR code</div>
+  <div id="hint">Point your camera at the banana bread photo next to the QR code<br><span class="sub">Hold your phone about 20–30 cm away</span></div>
 
 
   <!--
