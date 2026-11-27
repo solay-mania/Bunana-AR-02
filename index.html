@@ -114,7 +114,7 @@
     #start p { font-size: 18px; line-height: 1.4; max-width: 320px; margin: 0; }
     #startBtn { font-size: 18px; font-weight: 600; padding: 14px 36px; border: 0;
                 border-radius: 999px; background: #fff; color: #111; }
-    #hint { position: fixed; left: 0; right: 0; bottom: 32px; z-index: 5; display: none;
+    #hint { position: fixed; left: 24px; right: 24px; bottom: 32px; z-index: 5; display: none;
             text-align: center; color: #fff; font-size: 16px;
             text-shadow: 0 1px 4px rgba(0,0,0,.8); pointer-events: none; }
   </style>
@@ -133,7 +133,6 @@
       turn:   parseFloat(params.get('turn')   ?? '0.6'),   // rotation follows at this share of the position speed (lower = calmer tilt)
       feather: parseFloat(params.get('feather') ?? '0'), // soft edge, as a share of the video's width (0 = hard edge)
       match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
-      debug:  params.get('debug') === '1',                  // show the measured colour correction on screen
     };
     const ASPECT = 1.4; // print height / width
 
@@ -148,11 +147,6 @@
         this.pts = [];                             // sample grid over that backdrop (u across, v down from top)
         for (let i = 0; i < 7; i++) for (let j = 0; j < 5; j++) this.pts.push([0.12 + 0.76 * i / 6, 0.04 + 0.26 * j / 4]);
         this.v = new THREE.Vector3(); this.gain = null; this.last = 0;
-        if (TUNE.debug) {
-          this.dbg = document.createElement('div');
-          this.dbg.style.cssText = 'position:fixed;top:8px;left:8px;z-index:20;color:#fff;font:12px monospace;background:rgba(0,0,0,.5);padding:4px 6px;border-radius:4px';
-          document.body.appendChild(this.dbg);
-        }
       },
       tick(time) {
         if (TUNE.match <= 0 || time - this.last < 200) return;
@@ -187,7 +181,6 @@
         this.gain = this.gain ? this.gain.map((x, i) => x + (g[i] - x) * 0.3) : g;
         const lin = this.gain.map(x => Math.pow(1 + (x - 1) * TUNE.match, 2.2));   // sRGB ratio -> linear
         mesh.material.color.setRGB(lin[0], lin[1], lin[2]);
-        if (this.dbg) this.dbg.textContent = ((video.srcObject && video.srcObject.getVideoTracks()[0].label) || '') + ' ' + video.videoWidth + 'x' + video.videoHeight + '  R ' + this.gain[0].toFixed(2) + '  G ' + this.gain[1].toFixed(2) + '  B ' + this.gain[2].toFixed(2);
       }
     });
 
@@ -266,10 +259,10 @@
 
   <!-- Start screen: the tap is needed so phones allow the video to play with sound -->
   <div id="start">
-    <p>Point your camera at the print to bring it to life.</p>
+    <p>Point your camera at the banana bread photo next to the QR code.</p>
     <button id="startBtn">Start</button>
   </div>
-  <div id="hint">Point your camera at the print</div>
+  <div id="hint">Point your camera at the banana bread photo next to the QR code</div>
 
 
   <!--
@@ -327,12 +320,6 @@
     fitBody();
     window.addEventListener('resize', fitBody);
 
-    let dbgBox = null;
-    if (TUNE.debug) {
-      dbgBox = document.createElement('pre');
-      dbgBox.style.cssText = 'position:fixed;left:8px;top:40px;z-index:20;margin:0;color:#fff;font:11px/1.4 monospace;background:rgba(0,0,0,.55);padding:4px 6px;border-radius:4px;white-space:pre-wrap;max-width:90vw';
-      document.body.appendChild(dbgBox);
-    }
 
     // If the camera can't start (permission refused, no camera), say so instead of spinning forever
     scene.addEventListener('arError', () => {
@@ -380,15 +367,6 @@
         if (!ar.controller || !v || !v.videoWidth || !c) return;
         const key = c.clientWidth + 'x' + c.clientHeight + '|' + v.videoWidth + 'x' + v.videoHeight;
         if (key !== last) { last = key; ar._resize(); }
-        if (dbgBox) {
-          const r = v.getBoundingClientRect(), t = v.srcObject && v.srcObject.getVideoTracks()[0];
-          dbgBox.textContent =
-            'view ' + innerWidth + 'x' + innerHeight +
-            (window.visualViewport ? '  vv ' + Math.round(visualViewport.width) + 'x' + Math.round(visualViewport.height) : '') +
-            '  page ' + c.clientWidth + 'x' + c.clientHeight +
-            '\ncam ' + v.videoWidth + 'x' + v.videoHeight + '  box ' + Math.round(r.width) + 'x' + Math.round(r.height) +
-            ' @' + Math.round(r.top) + '\n' + (t ? t.label : '');
-        }
       };
       setInterval(refit, 500);
       window.addEventListener('resize', () => setTimeout(refit, 100));
