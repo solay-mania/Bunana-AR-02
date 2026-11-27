@@ -31,7 +31,10 @@
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           this.el.emit('arError', { error: 'VIDEO_FAIL' }); this.ui.showCompatibility(); return;
         }
-        navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } }).then((stream) => {
+        const res = parseInt(new URLSearchParams(location.search).get('res') ?? '720', 10);
+        const camera = { facingMode: 'environment' };
+        if (res > 0) { camera.width = { ideal: Math.round(res * 16 / 9) }; camera.height = { ideal: res }; }
+        navigator.mediaDevices.getUserMedia({ audio: false, video: camera }).then((stream) => {
           v.addEventListener('loadedmetadata', async () => {
             try { await v.play(); } catch (e) {}
             // wait until the size has been the same for 400 ms (at most 2.5 s)
@@ -81,12 +84,15 @@
   </style>
 
   <script>
-    // Tuning from the link, e.g. ?smooth=0.15&cf=0.0001&beta=0.001
+    // Tuning from the link, e.g. ?still=0.05&move=0.6&cf=0.0001&beta=10  (old fixed smoothing: ?smooth=0.5)
     const params = new URLSearchParams(location.search);
     const TUNE = {
-      smooth: parseFloat(params.get('smooth') ?? '0.5'),   // 0.05 = very smooth/slow ... 1 = no extra smoothing
-      cf:     parseFloat(params.get('cf')     ?? '0.00005'), // MindAR filter: lower = steadier when still
-      beta:   parseFloat(params.get('beta')   ?? '1'),  // MindAR filter: higher = less lag when moving
+      smooth: params.has('smooth') ? parseFloat(params.get('smooth')) : null, // fixed smoothing (old behaviour)
+      still:  parseFloat(params.get('still')  ?? '0.06'),  // adaptive: follow speed when holding still (lower = calmer)
+      move:   parseFloat(params.get('move')   ?? '0.6'),   // adaptive: follow speed when moving (higher = less lag)
+      cf:     parseFloat(params.get('cf')     ?? '0.0001'), // MindAR filter: lower = steadier when still
+      beta:   parseFloat(params.get('beta')   ?? '10'),     // MindAR filter: higher = less lag when moving
+      res:    parseInt(params.get('res')      ?? '720', 10), // camera resolution (short side); 0 = phone default
       feather: parseFloat(params.get('feather') ?? '0'), // soft edge, as a share of the video's width (0 = hard edge)
       match:  parseFloat(params.get('match')  ?? '1'),      // colour matching to the camera: 0 = off, 1 = full
       debug:  params.get('debug') === '1',                  // show the measured colour correction on screen
@@ -143,7 +149,7 @@
         this.gain = this.gain ? this.gain.map((x, i) => x + (g[i] - x) * 0.3) : g;
         const lin = this.gain.map(x => Math.pow(1 + (x - 1) * TUNE.match, 2.2));   // sRGB ratio -> linear
         mesh.material.color.setRGB(lin[0], lin[1], lin[2]);
-        if (this.dbg) this.dbg.textContent = 'R ' + this.gain[0].toFixed(2) + '  G ' + this.gain[1].toFixed(2) + '  B ' + this.gain[2].toFixed(2);
+        if (this.dbg) this.dbg.textContent = 'cam ' + video.videoWidth + 'x' + video.videoHeight + '  R ' + this.gain[0].toFixed(2) + '  G ' + this.gain[1].toFixed(2) + '  B ' + this.gain[2].toFixed(2);
       }
     });
 
@@ -195,8 +201,21 @@
         if (this.snap) {                       // first frame after finding the print: jump into place
           obj.position.copy(this.p); obj.quaternion.copy(this.q); obj.scale.copy(this.s);
           this.snap = false;
-        } else {                               // then ease toward it, independent of frame rate
-          const k = 1 - Math.pow(1 - Math.min(TUNE.smooth, 1), (dt || 16.7) / 16.7);
+        } else {
+          let base;
+          if (TUNE.smooth !== null) {
+            base = Math.min(TUNE.smooth, 1);   // fixed smoothing
+          } else {
+            // Adaptive: tiny changes are tracking noise -> follow slowly (steady);
+            // bigger changes are real movement -> follow quickly (no lag).
+            const width = Math.max(this.s.x, 1e-6);                       // print width in scene units
+            const dPos = obj.position.distanceTo(this.p) / width;         // in print widths
+            const dAng = obj.quaternion.angleTo(this.q);                  // radians
+            const motion = Math.max(dPos / 0.04, dAng / 0.05);            // 1 = ~4% of width or ~3 degrees
+            const t = Math.min(1, motion); const e = t * t * (3 - 2 * t);
+            base = TUNE.still + (TUNE.move - TUNE.still) * e;
+          }
+          const k = 1 - Math.pow(1 - base, (dt || 16.7) / 16.7);           // same feel at any frame rate
           obj.position.lerp(this.p, k); obj.quaternion.slerp(this.q, k); obj.scale.lerp(this.s, k);
         }
         obj.visible = true;
