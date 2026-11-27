@@ -66,7 +66,8 @@
   <style>
     /* Black goes on <html> only: a background on <body> would cover the live camera feed */
     html { background: #000; height: 100%; }
-    body { margin: 0; position: fixed; inset: 0; overflow: hidden; background: transparent;
+    body { margin: 0; position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100lvh;
+           overflow: hidden; background: transparent;
            font-family: -apple-system, system-ui, sans-serif; }
     #start { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
              align-items: center; justify-content: center; gap: 20px; padding: 24px;
@@ -277,6 +278,20 @@
       ar.filterMinCF = TUNE.cf;
       ar.filterBeta  = TUNE.beta;
       await ar.start();
+
+      // Keep the camera filling the screen: iPhone browsers change the page height after start
+      // (permission banner, toolbars) without always telling MindAR, which leaves a black band.
+      let lastW = 0, lastH = 0;
+      const refit = () => {
+        const c = ar.container;
+        if (!ar.controller || !ar.video || !ar.video.videoWidth || !c) return;
+        if (c.clientWidth !== lastW || c.clientHeight !== lastH) {
+          lastW = c.clientWidth; lastH = c.clientHeight;
+          ar._resize();
+        }
+      };
+      setInterval(refit, 500);
+      if (window.visualViewport) visualViewport.addEventListener('resize', () => setTimeout(refit, 100));
     });
 
     target.addEventListener('targetFound', () => {
