@@ -34,25 +34,41 @@
         const res = parseInt(new URLSearchParams(location.search).get('res') ?? '720', 10);
         const camera = { facingMode: 'environment' };
         if (res > 0) { camera.width = { ideal: Math.round(res * 16 / 9) }; camera.height = { ideal: res }; }
-        // iPhones with several back lenses hand web pages a "virtual" camera that jumps between lenses
-        // (e.g. to macro when close), which refocuses and loses the print. Lock to the main lens instead.
+        // Always use the phone's main back camera. Phones with several lenses may otherwise hand the
+        // page the telephoto (picture too zoomed in), the ultra-wide, or iPhone's lens-switching
+        // "virtual" camera (refocuses and loses the print). Camera names differ by phone and language,
+        // so: skip front cameras, try the shortest name first ("Back Camera" vs "Back Telephoto
+        // Camera", "camera2 0" vs "camera2 3"), and keep the first one that really faces backwards.
         const lens = new URLSearchParams(location.search).get('lens') ?? 'main';
-        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-        const lockMainLens = async (stream) => {
-          if (lens !== 'main' || !isIOS) return stream;
+        const resetZoom = (s) => {
           try {
-            const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-            const main = cams.find(d => /^back camera$/i.test(d.label.trim())) ||
-                         cams.find(d => /back|rear/i.test(d.label) && !/ultra|dual|triple|tele|wide|front/i.test(d.label));
+            const t = s.getVideoTracks()[0], caps = t.getCapabilities ? t.getCapabilities() : {};
+            if (caps.zoom) t.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, Math.max(caps.zoom.min, 1)) }] }).catch(() => {});
+          } catch (e) {}
+          return s;
+        };
+        const lockMainLens = async (stream) => {
+          if (lens !== 'main') return stream;
+          try {
+            const cams = (await navigator.mediaDevices.enumerateDevices())
+              .filter(d => d.kind === 'videoinput' && d.deviceId && !/front|facing front|user/i.test(d.label));
+            if (cams.length < 2) return resetZoom(stream);
+            const num = (l) => { const m = l.match(/\b\d+\b/); return m ? parseInt(m[0], 10) : 0; };   // "camera2 3" -> 3
+            cams.sort((a, b) => (a.label.length - b.label.length) || (num(a.label) - num(b.label)));
             const current = stream.getVideoTracks()[0].getSettings().deviceId;
-            if (main && main.deviceId && main.deviceId !== current) {
-              stream.getTracks().forEach(t => t.stop());
-              const c = Object.assign({}, camera); delete c.facingMode; c.deviceId = { exact: main.deviceId };
-              return await navigator.mediaDevices.getUserMedia({ audio: false, video: c });
+            if (cams[0].deviceId === current) return resetZoom(stream);   // already on the main lens
+
+            stream.getTracks().forEach(t => t.stop());
+            for (const d of cams) {
+              const c = Object.assign({}, camera); delete c.facingMode; c.deviceId = { exact: d.deviceId };
+              try {
+                const s2 = await navigator.mediaDevices.getUserMedia({ audio: false, video: c });
+                if (s2.getVideoTracks()[0].getSettings().facingMode === 'user') { s2.getTracks().forEach(t => t.stop()); continue; }
+                return resetZoom(s2);
+              } catch (e) { /* try the next one */ }
             }
-          } catch (e) { console.log('lens lock skipped', e); }
-          return stream;
+            return resetZoom(await navigator.mediaDevices.getUserMedia({ audio: false, video: camera }));
+          } catch (e) { console.log('lens lock skipped', e); return stream; }
         };
         navigator.mediaDevices.getUserMedia({ audio: false, video: camera }).then(lockMainLens).then((stream) => {
           v.addEventListener('loadedmetadata', async () => {
